@@ -1,14 +1,11 @@
-
+import sys
 import customtkinter as ctk
-from tkinter import messagebox
 from openpyxl import load_workbook
 import tkinter as tk
-from tkinter import simpledialog, Canvas
+from tkinter import simpledialog, Canvas, messagebox
 from PIL import Image, ImageTk 
 from screeninfo import get_monitors
-import sys
 import pygetwindow as gw
-from PIL import Image, ImageTk
 from datetime import datetime
 from __main__ import *
 from selenium import webdriver
@@ -17,8 +14,6 @@ from bs4 import BeautifulSoup
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, WebDriverException
 
 #Path to excel sheet
@@ -43,12 +38,24 @@ def load_hardware_ids(sheet):
     # Perform a quick lookup in the dictionary
     #return hardware_dict.get(str(hardware_id))  # This is O(1)
 
-def find_hardware_id(sheet, hardware_id):
-    # Loop through the rows and look for the matching hardware_id
-    for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, values_only=True): #checks sheet2 (user table) for a hardware ID 
-        if str(row[0]) == str(hardware_id):  # Compare as strings to avoid type mismatches
-            return row[1] 
+def find_hardware_id(sheet2, hardware_id):
+    # Loop through the rows starting from row 2 to skip headers (if any)
+    for row in sheet2.iter_rows(min_row=2, max_row=sheet2.max_row, values_only=True):
+        if str(row[1]) == str(hardware_id):  # Compare hardware_id in column B (index 1)
+            return row[0]  # Return the username from column A (index 0)
+    
     return None  # Return None if not found
+def find_userdata(hardware_id,sheet2):
+    # Loop through the rows starting from row 2 to skip headers
+    for row in sheet2.iter_rows(min_row=2, max_row=sheet2.max_row, values_only=True):
+        if str(row[1]) == str(hardware_id):  # Compare hardware_id in column B (index 1)
+            # Return first_name (D, index 3), last_name (E, index 4), major (F, index 5)
+            first_name = row[3]  # Column D (index 3 in zero-based)
+            last_name = row[4]   # Column E (index 4 in zero-based)
+            major = row[5]       # Column F (index 5 in zero-based)
+            return first_name, last_name, major
+    
+    return None, None, None  # Return None for all if not found
 
 def add_user_to_sheet(sheet, hardware_id, username,first_name,last_name,major):
     wb = load_workbook(filename=file_path)
@@ -69,6 +76,7 @@ def add_user_to_sheet(sheet, hardware_id, username,first_name,last_name,major):
     now = datetime.now()
     timestamp = now.timestamp()
     scans_sheet.append([hardware_id, username, timestamp])
+    print(f"add_user_to_sheet has ran")
 
     # Save the workbook after making changes
     wb.save(file_path)
@@ -185,37 +193,102 @@ def prompt_for_username():
     # Simple dialog to ask for a username
     root = tk.Tk()
     root.withdraw()  # Hide the main window
-    username = simpledialog.askstring("Input", "Please enter your username:")
+    def is_valid_username(entered_username):
+        """Validate the username based on the provided rules."""
+        if not entered_username.strip():
+            return False, "Username cannot be blank."
+        
+        if entered_username.isdigit():
+            return False, "Username cannot be all numbers."
+        
+        if "@" in entered_username and "." in entered_username:
+            return False, "Username cannot be an email address."
+        
+        return True, "Valid username."
+    
+    def submit_username(event=None):
+        """Check the username and store it if valid. Allow event for Enter key binding."""
+        entered_username = entry.get()
+        valid, message = is_valid_username(entered_username)
+        
+        if valid:
+            nonlocal username  # Declare nonlocal to update username within the nested function
+            username = entered_username  # Store the valid username
+            root.quit()  # Optionally close the window after successful submission
+        else:
+            messagebox.showerror("Error", message)
+    
+    # Set up the username variable to hold the result
+    username = None
+    
+    # Initialize the main window
+    ctk.set_appearance_mode("dark")  # Modes: "dark" or "light"
+    ctk.set_default_color_theme("blue")  # We will override the default colors manually
+    
+    root = ctk.CTk()
+    root.title("Username Entry")
+    root.geometry("1000x600")  # Setting a larger window size
+    
+    # Override the color theme to use the specified orange
+    orange_color = "#F56600"
+    
+    # Title label
+    title_label = ctk.CTkLabel(master=root, text="Welcome to the Makerspace! Enter Your Clemson Username:", font=("Arial", 24), text_color=orange_color)
+    title_label.pack(pady=30)
+    
+    # Create a label and entry for the username
+    label = ctk.CTkLabel(master=root, text="The part before the @clemson.edu", font=("Arial", 18))
+    label.pack(pady=10)
+    
+    entry = ctk.CTkEntry(master=root, width=300, height=50, placeholder_text="Enter username", font=("Arial", 16))
+    entry.pack(pady=10)
+    
+    # Create a submit button with the orange color
+    submit_button = ctk.CTkButton(master=root, text="Submit", command=submit_username, width=200, height=50, fg_color=orange_color, hover_color="#FF7800", font=("Arial", 18))
+    submit_button.pack(pady=40)
+    
+    # Bind the Enter key to submit the form
+    root.bind('<Return>', submit_username)  # Bind Enter (Return) key to the submit function
+    
+    # Start the application loop
+    root.mainloop()
+    # Return the username after the window closes
     return username
+
+# Example usage in the larger script:
+# final_username = get_username()
+    
+
+    #username = simpledialog.askstring("Input", "Please enter your username:")
+    #return username
 
 def main():
 
     hardware_id = sys.argv[1] #This gets the hardware ID from the gloabl system variables as defined from the other script to pass along the variables.
-    workbook,sheet ,sheet2 = load_excel()
-    username = find_hardware_id(sheet, hardware_id)
+    workbook,sheet,sheet2 = load_excel()
+    username = find_hardware_id(sheet2, hardware_id)
     first_name=None
     root = tk.Tk()
     root.withdraw()  # Hide the root window initially
     # Bind the Escape key to close the program
-
     root.bind("<Escape>", close_on_escape)
 
     if username != None:
         print(f"User found: {username}")
+        first_name,last_name,major = find_userdata(hardware_id, sheet2)
+        show_welcome_popup(root,username,first_name)
         root.deiconify()  # Show the window
         make_fullscreen_on_top(root)
-        show_welcome_popup(root,username,first_name)
         root.mainloop()
     else:
         print("New user detected. Prompting for username.")
         username = prompt_for_username()
-        if username != None and isinstance(username, str) and any(char.isalpha() for char in username):
-            first_name, last_name, major = scrape_user(username)
-            add_user_to_sheet(sheet, hardware_id, username,first_name,last_name,major)
-            workbook.save(file_path)
-            print(f"User {username} added to sheet.")
-        else:
-            prompt_for_username()
+        #generic_welcome(username)
+        first_name, last_name, major = scrape_user(username)
+        add_user_to_sheet(sheet, hardware_id, username,first_name,last_name,major)
+        workbook.save(file_path)
+        print(f"User {username} added to sheet.")
+            
     
 if __name__ == "__main__":
     main()
