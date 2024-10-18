@@ -15,8 +15,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
-import streamlit as st
-from PIL import Image
 
 #Path to excel sheet
 file_path = "hardware_users.xlsx"
@@ -36,10 +34,6 @@ def load_hardware_ids(sheet):
     for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, values_only=True):
         hardware_dict[str(row[0])] = row[1]  # Hardware ID as the key, username as the value
 
-#def find_hardware_id(hardware_dict, hardware_id):
-    # Perform a quick lookup in the dictionary
-    #return hardware_dict.get(str(hardware_id))  # This is O(1)
-
 def find_hardware_id(sheet2, hardware_id):
     # Loop through the rows starting from row 2 to skip headers (if any)
     for row in sheet2.iter_rows(min_row=2, max_row=sheet2.max_row, values_only=True):
@@ -50,14 +44,13 @@ def find_hardware_id(sheet2, hardware_id):
 def find_userdata(hardware_id,sheet2):
     # Loop through the rows starting from row 2 to skip headers
     for row in sheet2.iter_rows(min_row=2, max_row=sheet2.max_row, values_only=True):
-        if str(row[1]) == str(hardware_id):  # Compare hardware_id in column B (index 1)
-            # Return first_name (D, index 3), last_name (E, index 4), major (F, index 5)
-            first_name = row[3]  # Column D (index 3 in zero-based)
-            last_name = row[4]   # Column E (index 4 in zero-based)
-            major = row[5]       # Column F (index 5 in zero-based)
+        if str(row[1]) == str(hardware_id):  # Look for hardware_id in col. B
+            first_name = row[3]  # Column D 
+            last_name = row[4]   # Column E 
+            major = row[5]       # Column F
             return first_name, last_name, major
     
-    return None, None, None  #   None for all if not found
+    return None, None, None  #   Set to None if they are not found
 
 def add_user_to_sheet(sheet_name,sheet2_name,hardware_id, username,first_name,last_name,major,workbook,userstatus):
     wb = workbook
@@ -70,7 +63,7 @@ def add_user_to_sheet(sheet_name,sheet2_name,hardware_id, username,first_name,la
                 cell_hardware_id = row[1].value  # Column B in "Users" for hardware_id
 
             # Cast both the hardware_id from input and the one from the sheet to str for comparison
-                if str(cell_hardware_id) == str(hardware_id):
+                if str(cell_hardware_id) == str(hardware_id): #str is irrelavent but may help edge cases where numbers get input as strings?
                     match_found = True
                     print(f"User with hardware ID {hardware_id} already exists in 'Users' sheet.")
                     break  # Stop searching after finding the match
@@ -116,8 +109,9 @@ def scrape_user(username):
         # Wait for the full name element to appear
         try:
             WebDriverWait(driver, 1).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, '.personView .primaryInfo h2'))
+                EC.presence_of_element_located((By.CSS_SELECTOR, '.personView .primaryInfo h2')) 
             )
+            #the time should be upped if the scrape does not complete in time
         except TimeoutException:
             print(f"Timeout while waiting for the element on the page for {username}.")
             driver.quit()
@@ -145,8 +139,8 @@ def scrape_user(username):
             last_name = name_parts[-1]  # The last part of the name, if they have like a number or sr. or something after their last name itll fuck it up but it doesn't matter because we don't really need the last name that badly anyways
         else:
             first_name, last_name = None, None
-            #Find major
-
+            
+        #Find major
         major_element = soup.select_one('.personView .primaryInfo .data p')
         if major_element:
             major = major_element.get_text().strip()
@@ -157,30 +151,40 @@ def scrape_user(username):
         print(f"Last Name: {last_name}")
         print(f"Major: {major}")
 
-        # Close the driver
+        # Close the scraping driver/borderless window
         driver.quit()
         return first_name, last_name, major
 
 def make_fullscreen_on_top(root):
     root.attributes('-fullscreen', True)
     root.attributes('-topmost', True)
+#this can probably be put within another function but it works for now
 
-def show_welcome_popup(username, first_name):
-    # Set up the page layout
-    st.set_page_config(page_title="Welcome", layout="centered")
-    
-    # Load and display the background image
-    st.markdown(
-        """
-        <style>
-        .main {
-            background-image: url("background.png");
-            background-size: cover;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+def show_welcome_popup(root, username, first_name):
+    # Set the background image
+
+    image = Image.open("background.png")  # Replace with your image file
+    bg_image = ImageTk.PhotoImage(image)
+    root.bg_image = bg_image  # Keep a reference to avoid garbage collection
+    # Create a label for the background
+    background_label = tk.Label(root, image=bg_image)
+    background_label.place(relwidth=1, relheight=1)  # Stretch to fit window
+
+    # Add a welcome message
+    if first_name == None:
+        first_name = username
+    message = f"Welcome back, {first_name}!"
+    message_label = tk.Label(root, text=message, font=("Helvetica", 36, "bold"), fg="white", bg="black")
+    message_label.place(relx=0.5, rely=0.5, anchor="center")  # Center the message
+
+    # Load and place the logo below the text
+    logo_image = Image.open("LogoBW.png")  # Replace with your logo image file
+    logo_image = logo_image.resize((508, 128))  # Resize if needed
+    logo_photo = ImageTk.PhotoImage(logo_image)
+
+    logo_label = tk.Label(root, image=logo_photo)
+    logo_label.place(relx=0.5, rely=0.7, anchor="center")
+    root.after(3000, root.quit)  # Close the window after 3 seconds
 
     # Define the user welcome message
     if first_name is None:
