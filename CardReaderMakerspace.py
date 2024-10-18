@@ -15,6 +15,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
+import streamlit as st
+from PIL import Image
 
 #Path to excel sheet
 file_path = "hardware_users.xlsx"
@@ -55,36 +57,43 @@ def find_userdata(hardware_id,sheet2):
             major = row[5]       # Column F (index 5 in zero-based)
             return first_name, last_name, major
     
-    return None, None, None  # Return None for all if not found
+    return None, None, None  #   None for all if not found
 
-def add_user_to_sheet(sheet, hardware_id, username,first_name,last_name,major):
-    wb = load_workbook(filename=file_path)
+def add_user_to_sheet(sheet_name,sheet2_name,hardware_id, username,first_name,last_name,major,workbook,userstatus):
+    wb = workbook
     scans_sheet = wb[sheet_name]
     users_sheet = wb[sheet2_name]
-    # Add the hardware ID and username to the next available row
-    # First, update the "Users" sheet if a matching hardware_id is found
-    user_updated = False
-    for row in users_sheet.iter_rows(min_row=2, values_only=False):  # Skip header row
-        cell_hardware_id = row[1].value  # Column B in "Users"
-        if cell_hardware_id == hardware_id:
-            # Update first name, last name, and major in columns D, E, and F
-            row[3].value = first_name  # Column D
-            row[4].value = last_name   # Column E
-            row[5].value = major       # Column F
-            user_updated = True
-            break  # Stop after finding and updating the row
+    
+    if userstatus == 1:
+            # Search for matching hardware ID in the "Users" sheet or for an empty hardware ID cell
+            for row in users_sheet.iter_rows(min_row=2, values_only=False):  # Skip header row
+                cell_hardware_id = row[1].value  # Column B in "Users" for hardware_id
+
+            # Cast both the hardware_id from input and the one from the sheet to str for comparison
+                if str(cell_hardware_id) == str(hardware_id):
+                    match_found = True
+                    print(f"User with hardware ID {hardware_id} already exists in 'Users' sheet.")
+                    break  # Stop searching after finding the match
+
+                # If the hardware ID cell is empty (i.e., new entry row), fill in this row
+                if cell_hardware_id is None or cell_hardware_id == "":  # Check for an empty hardware ID
+                    row[0].value = username  # Column A for username
+                    row[1].value = int(hardware_id)  # Column B for hardware ID
+                    row[3].value = first_name  # Column D for first name
+                    row[4].value = last_name   # Column E for last name
+                    row[5].value = major       # Column F for major
+                    match_found = True
+                    print(f"New user {first_name} {last_name} added to 'Users' sheet.")
+                    break  # Stop searching after appending the new data
+
+    # Add the scan to the 'Scans' sheet (this happens regardless of userstatus)
     now = datetime.now()
     timestamp = now.timestamp()
-    scans_sheet.append([hardware_id, username, timestamp])
-    print(f"add_user_to_sheet has ran")
-
+    scans_sheet.append([int(hardware_id), username, timestamp])
+    
     # Save the workbook after making changes
     wb.save(file_path)
-    
-    if user_updated:
-        print(f"User {first_name} {last_name}'s information updated in 'Users' sheet.")
-    else:
-        print(f"New scan added for {username} in 'Scans' sheet.")
+    print(f"add_user_to_sheet has run, workbook saved.")
 
 
 def scrape_user(username):
@@ -156,33 +165,34 @@ def make_fullscreen_on_top(root):
     root.attributes('-fullscreen', True)
     root.attributes('-topmost', True)
 
-
-def show_welcome_popup(root, username, first_name):
-    # Set the background image
-
-    image = Image.open("background.png")  # Replace with your image file
-    bg_image = ImageTk.PhotoImage(image)
-    root.bg_image = bg_image  # Keep a reference to avoid garbage collection
-    # Create a label for the background
-    background_label = tk.Label(root, image=bg_image)
-    background_label.place(relwidth=1, relheight=1)  # Stretch to fit window
+def show_welcome_popup(username, first_name):
+    # Set up the page layout
+    st.set_page_config(page_title="Welcome", layout="centered")
     
-    # Add a welcome message
-    if first_name == None:
+    # Load and display the background image
+    st.markdown(
+        """
+        <style>
+        .main {
+            background-image: url("background.png");
+            background-size: cover;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Define the user welcome message
+    if first_name is None:
         first_name = username
-    message = f"Welcome back, {first_name}!"
-    message_label = tk.Label(root, text=message, font=("Helvetica", 36, "bold"), fg="white", bg="black")
-    message_label.place(relx=0.5, rely=0.5, anchor="center")  # Center the message
-
-    # Load and place the logo below the text
-    logo_image = Image.open("LogoBW.png")  # Replace with your logo image file
-    logo_image = logo_image.resize((508, 128))  # Resize if needed
-    logo_photo = ImageTk.PhotoImage(logo_image)
-
-    logo_label = tk.Label(root, image=logo_photo)
-    logo_label.place(relx=0.5, rely=0.7, anchor="center")
-    root.after(3000, root.quit)  # Close the window after 3 seconds
-
+    welcome_message = f"Welcome back, {first_name}!"
+    
+    # Display the welcome message
+    st.markdown(f"<h1 style='text-align: center; color: white;'>{welcome_message}</h1>", unsafe_allow_html=True)
+    
+    # Load and display the logo image
+    logo_image = Image.open("LogoBW.png")
+    st.image(logo_image, caption="", use_column_width=True)
 
 def close_on_escape(event):
     """Function to close the program when the Escape key is pressed."""
@@ -255,15 +265,8 @@ def prompt_for_username():
     # Return the username after the window closes
     return username
 
-# Example usage in the larger script:
-# final_username = get_username()
-    
-
-    #username = simpledialog.askstring("Input", "Please enter your username:")
-    #return username
-
 def main():
-
+    userstatus=None
     hardware_id = sys.argv[1] #This gets the hardware ID from the gloabl system variables as defined from the other script to pass along the variables.
     workbook,sheet,sheet2 = load_excel()
     username = find_hardware_id(sheet2, hardware_id)
@@ -275,7 +278,9 @@ def main():
 
     if username != None:
         print(f"User found: {username}")
+        userstatus=0
         first_name,last_name,major = find_userdata(hardware_id, sheet2)
+        add_user_to_sheet(sheet_name,sheet2_name,hardware_id, username,first_name,last_name,major,workbook,userstatus)
         show_welcome_popup(root,username,first_name)
         root.deiconify()  # Show the window
         make_fullscreen_on_top(root)
@@ -283,9 +288,10 @@ def main():
     else:
         print("New user detected. Prompting for username.")
         username = prompt_for_username()
-        #generic_welcome(username)
+        userstatus=1
+        show_welcome_popup(root,username,first_name)
         first_name, last_name, major = scrape_user(username)
-        add_user_to_sheet(sheet, hardware_id, username,first_name,last_name,major)
+        add_user_to_sheet(sheet_name,sheet2_name,hardware_id, username,first_name,last_name,major,workbook,userstatus)
         workbook.save(file_path)
         print(f"User {username} added to sheet.")
             
