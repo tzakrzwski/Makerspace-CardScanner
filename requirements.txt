@@ -1,0 +1,7 @@
+pillow
+customtkinter
+openpyxl
+screeninfo
+pygetwindow
+selenium
+beautifulsoup4
