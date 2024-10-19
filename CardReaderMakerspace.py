@@ -208,14 +208,14 @@ def prompt_for_username():
         return True, "Valid username."
     
     def submit_username(event=None):
-        """Check the username and store it if valid. Allow event for Enter key binding."""
         entered_username = entry.get()
         valid, message = is_valid_username(entered_username)
         
         if valid:
             nonlocal username  # Declare nonlocal to update username within the nested function
             username = entered_username  # Store the valid username
-            root.quit()  # Optionally close the window after successful submission
+            root.quit()  # Stop the local mainloop
+            root.destroy()  # Close the username entry window
         else:
             messagebox.showerror("Error", message)
     
@@ -228,9 +228,9 @@ def prompt_for_username():
     
     root = ctk.CTk()
     root.title("Username Entry")
-    root.geometry("1000x600")  # Setting a larger window size
+    root.geometry("1500x500")  # Setting a larger window size
     
-    # Override the color theme to use the specified orange
+    # Override the color theme to use the clemson orange
     orange_color = "#F56600"
     
     # Title label
@@ -243,7 +243,8 @@ def prompt_for_username():
     
     entry = ctk.CTkEntry(master=root, width=300, height=50, placeholder_text="Enter username", font=("Arial", 16))
     entry.pack(pady=10)
-    
+    entry.focus() #trying to focus on the text box
+   
     # Create a submit button with the orange color
     submit_button = ctk.CTkButton(master=root, text="Submit", command=submit_username, width=200, height=50, fg_color=orange_color, hover_color="#FF7800", font=("Arial", 18))
     submit_button.pack(pady=40)
@@ -285,6 +286,7 @@ def main():
         add_user_to_sheet(sheet_name,sheet2_name,hardware_id, username,first_name,last_name,major,workbook,userstatus)
         workbook.save(file_path)
         print(f"User {username} added to sheet.")
+        username=None
             
     
 if __name__ == "__main__":
