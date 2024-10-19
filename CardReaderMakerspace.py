@@ -162,14 +162,13 @@ def make_fullscreen_on_top(root):
 
 def show_welcome_popup(root, username, first_name):
     # Set the background image
-
     image = Image.open("background.png")  # Replace with your image file
     bg_image = ImageTk.PhotoImage(image)
     root.bg_image = bg_image  # Keep a reference to avoid garbage collection
     # Create a label for the background
     background_label = tk.Label(root, image=bg_image)
     background_label.place(relwidth=1, relheight=1)  # Stretch to fit window
-
+    
     # Add a welcome message
     if first_name == None:
         first_name = username
@@ -185,18 +184,6 @@ def show_welcome_popup(root, username, first_name):
     logo_label = tk.Label(root, image=logo_photo)
     logo_label.place(relx=0.5, rely=0.7, anchor="center")
     root.after(3000, root.quit)  # Close the window after 3 seconds
-
-    # Define the user welcome message
-    if first_name is None:
-        first_name = username
-    welcome_message = f"Welcome back, {first_name}!"
-    
-    # Display the welcome message
-    st.markdown(f"<h1 style='text-align: center; color: white;'>{welcome_message}</h1>", unsafe_allow_html=True)
-    
-    # Load and display the logo image
-    logo_image = Image.open("LogoBW.png")
-    st.image(logo_image, caption="", use_column_width=True)
 
 def close_on_escape(event):
     """Function to close the program when the Escape key is pressed."""
