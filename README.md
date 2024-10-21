@@ -10,8 +10,8 @@ This repository contains the **Makerspace Card Reader Script** for managing user
 - [Running the Script](#running-the-script)
 
 ## Overview
-- The Card Reader Script was made to simplify sign-in to the makerspace and replace the web-interface given on the sign-in tablet ([visit.cumaker.space](https://visit.cumaker.space/)
-- The goal of the script is to associate scan data (hardware ID) to a clemson user account and record time scanned with the goal to link to an AWS databse with its own editable frontend.
+- The Card Reader Script was made to simplify sign-in to the makerspace and replace the web-interface given on the sign-in tablet ([visit.cumaker.space](https://visit.cumaker.space/))
+- The goal of the script is to associate scan data (hardware ID) to a clemson user account and record time scanned.
 
 ## Features
 - Automatic scan-in and logging of makerspace users with only one username entry per scan device.
