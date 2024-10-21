@@ -21,14 +21,14 @@ file_path = "hardware_users.xlsx"
 sheet_name = "Scans"
 sheet2_name ="Users"
 
-def load_excel():
+def load_excel(): #this is a bit redundant but it works, can eventually use this in "add user to shee"
     # Load the workbook and sheet
     workbook = load_workbook(filename=file_path)
-    sheet = workbook[sheet_name] #this is a bit redundant but it works
+    sheet = workbook[sheet_name] 
     sheet2 = workbook[sheet2_name] 
     return workbook, sheet, sheet2
 
-def load_hardware_ids(sheet):
+#def load_hardware_ids(sheet): #Not even using this rn
     hardware_dict = {}
     # Load the hardware IDs and usernames into a dictionary
     for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, values_only=True):
@@ -162,32 +162,32 @@ def make_fullscreen_on_top(root):
 
 def show_welcome_popup(root, username, first_name):
     # Set the background image
-    image = Image.open("background.png")  # Replace with your image file
+    image = Image.open("background.png")
     bg_image = ImageTk.PhotoImage(image)
     root.bg_image = bg_image  # Keep a reference to avoid garbage collection
-    # Create a label for the background
-    background_label = tk.Label(root, image=bg_image)
-    background_label.place(relwidth=1, relheight=1)  # Stretch to fit window
+    background_label = tk.Label(root, image=bg_image)   # Create a label for the background
+    background_label.place(relwidth=1, relheight=1)  # Stretch to fit window (Idek if this works properly because it isn't doing it that well)
     
     # Add a welcome message
     if first_name == None:
         first_name = username
     message = f"Welcome back, {first_name}!"
-    message_label = tk.Label(root, text=message, font=("Helvetica", 36, "bold"), fg="white", bg="black")
+    message_label = tk.Label(root, text=message, font=("Vendetta", 50, "bold"), fg="white", bg="black")
     message_label.place(relx=0.5, rely=0.5, anchor="center")  # Center the message
 
-    # Load and place the logo below the text
-    logo_image = Image.open("LogoBW.png")  # Replace with your logo image file
-    logo_image = logo_image.resize((508, 128))  # Resize if needed
-    logo_photo = ImageTk.PhotoImage(logo_image)
 
-    logo_label = tk.Label(root, image=logo_photo)
-    logo_label.place(relx=0.5, rely=0.7, anchor="center")
+    ### Not using this currently because tkinter doesn't seem to allow for transparent stacking of images
+    # Load and place the logo below the text
+    #logo_image = Image.open("LogoBW.png")  # Replace with your logo image file
+    #logo_image = logo_image.resize((508, 128))  # Resize if needed
+    #logo_photo = ImageTk.PhotoImage(logo_image)
+    #logo_label = tk.Label(root, image=logo_photo)
+    #logo_label.place(relx=0.5, rely=0.7, anchor="center")
+
     root.after(3000, root.quit)  # Close the window after 3 seconds
 
-def close_on_escape(event):
-    """Function to close the program when the Escape key is pressed."""
-    print("Escape key pressed. Exiting program...")
+def close_on_escape(event): #this is maybe redundant because I do this inside some of the definitions
+    print("Escape key pressed. Exiting program...") #esc to close
     sys.exit()  # Exit the program
 
 def prompt_for_username():
@@ -263,10 +263,10 @@ def main():
     workbook,sheet,sheet2 = load_excel()
     username = find_hardware_id(sheet2, hardware_id)
     first_name=None
+    major=None
     root = tk.Tk()
     root.withdraw()  # Hide the root window initially
-    # Bind the Escape key to close the program
-    root.bind("<Escape>", close_on_escape)
+    root.bind("<Escape>", close_on_escape) # Bind the Escape key to close the program
 
     if username != None:
         print(f"User found: {username}")
