@@ -20,6 +20,7 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 file_path = "hardware_users.xlsx"
 sheet_name = "Scans"
 sheet2_name ="Users"
+Location= "Watt"
 
 def load_excel(): #this is a bit redundant but it works, can eventually use this in "add user to shee"
     # Load the workbook and sheet
@@ -81,12 +82,13 @@ def add_user_to_sheet(sheet_name,sheet2_name,hardware_id, username,first_name,la
 
     # Add the scan to the 'Scans' sheet (this happens regardless of userstatus)
     now = datetime.now()
-    timestamp = now.timestamp()
+    #timestamp = now.timestamp() #use this for seconds only
+    timestamp = now.strftime('%m/%d/%Y %H:%M:%S') # Format the time to display as "YYYY-MM-DD HH:MM"
     scans_sheet.append([int(hardware_id), username, timestamp])
     
     # Save the workbook after making changes
     wb.save(file_path)
-    print(f"add_user_to_sheet has run, workbook saved.")
+    print(f"Scan Added, workbook saved.")
 
 
 def scrape_user(username):
@@ -160,7 +162,7 @@ def make_fullscreen_on_top(root):
     root.attributes('-topmost', True)
 #this can probably be put within another function but it works for now
 
-def show_welcome_popup(root, username, first_name):
+def show_welcome_popup(root, username, first_name, userstatus):
     # Set the background image
     image = Image.open("background.png")
     bg_image = ImageTk.PhotoImage(image)
@@ -168,10 +170,14 @@ def show_welcome_popup(root, username, first_name):
     background_label = tk.Label(root, image=bg_image)   # Create a label for the background
     background_label.place(relwidth=1, relheight=1)  # Stretch to fit window (Idek if this works properly because it isn't doing it that well)
     
-    # Add a welcome message
+    # welcome back message
     if first_name == None:
         first_name = username
-    message = f"Welcome back, {first_name}!"
+    if userstatus == 0:
+        message = f"Welcome back, {first_name}!"
+    else:
+        message = f"Welcome to the {Location} Makerspace!"
+    
     message_label = tk.Label(root, text=message, font=("Vendetta", 50, "bold"), fg="white", bg="black")
     message_label.place(relx=0.5, rely=0.5, anchor="center")  # Center the message
 
@@ -273,7 +279,7 @@ def main():
         userstatus=0
         first_name,last_name,major = find_userdata(hardware_id, sheet2)
         add_user_to_sheet(sheet_name,sheet2_name,hardware_id, username,first_name,last_name,major,workbook,userstatus)
-        show_welcome_popup(root,username,first_name)
+        show_welcome_popup(root,username,first_name,userstatus)
         root.deiconify()  # Show the window
         make_fullscreen_on_top(root)
         root.mainloop()
@@ -281,11 +287,10 @@ def main():
         print("New user detected. Prompting for username.")
         username = prompt_for_username()
         userstatus=1
-        show_welcome_popup(root,username,first_name)
+        show_welcome_popup(root,username,first_name,userstatus)
         first_name, last_name, major = scrape_user(username)
         add_user_to_sheet(sheet_name,sheet2_name,hardware_id, username,first_name,last_name,major,workbook,userstatus)
         workbook.save(file_path)
-        print(f"User {username} added to sheet.")
         username=None
             
     
