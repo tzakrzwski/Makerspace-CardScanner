@@ -27,7 +27,7 @@ This repository contains the **Makerspace Card Reader Script** for managing user
 ```bash
      pip install -r requirements.txt
 ```
-- **Chrome Web Driver**installed: should be installed by default if you have crome downloaded or are on windows generally. 
+- **Chrome Web Driver** : should be installed already if you have chrome or a chromium based browser installed. 
 
 ## Excel Setup
 1. **Excel Document**:  
