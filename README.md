@@ -23,7 +23,7 @@ This repository contains the **Makerspace Card Reader Script** for managing user
 
 - **Python 3.x** installed.
      It is reccomended to check the option "Add to PATH" and "Add Python to Enviroment Variables" in the installer options.
-- Navigate to the folder including "Makerspace-CardScanner and run the following command in command prompt.
+- Navigate to the cloned folder including "Makerspace-CardScanner" and run the following command in command prompt.
 ```bash
      pip install -r requirements.txt
 ```
@@ -40,7 +40,7 @@ This repository contains the **Makerspace Card Reader Script** for managing user
 
 2. **Script Setup**:
    - Clone this repository.
-   - Ensure you have "background.png" and "LogoBW.png" in main directory. #will be included in the github at a later date.
+   - Ensure you have "background.png" and "BackgroundTablet.png" in main directory. #will be included in the github at a later date.
    - Install the required Python libraries using:
      ```bash
      pip install -r requirements.txt
