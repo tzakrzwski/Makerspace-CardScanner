@@ -20,10 +20,13 @@ This repository contains the **Makerspace Card Reader Script** for managing user
 - Data logging in an Excel file.
 
 ## Requirements
+
+- **Python 3.x** installed.
+     It is reccomended to check the option "Add to PATH" and "Add Python to Enviroment Variables" in the installer options.
+- Navigate to the folder including "Makerspace-CardScanner and run the following command in command prompt.
 ```bash
      pip install -r requirements.txt
 ```
-- **Python 3.x** installed.
 - **Chrome Web Driver**installed: should be installed by default if you have crome downloaded or are on windows generally. 
 
 ## Excel Setup
