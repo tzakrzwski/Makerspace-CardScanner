@@ -5,3 +5,5 @@ screeninfo
 pygetwindow
 selenium
 beautifulsoup4
+box-sdk-gen
+flask

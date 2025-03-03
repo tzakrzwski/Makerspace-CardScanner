@@ -167,8 +167,8 @@ def show_welcome_popup(root, username, first_name, userstatus):
     image = Image.open("background.png")
     bg_image = ImageTk.PhotoImage(image)
     root.bg_image = bg_image  # Keep a reference to avoid garbage collection
-    background_label = tk.Label(root, image=bg_image)   # Create a label for the background
-    background_label.place(relwidth=1, relheight=1)  # Stretch to fit window (Idek if this works properly because it isn't doing it that well)
+    #background_label = tk.Label(root, image=bg_image)   # Create a label for the background
+    #background_label.place(relwidth=1, relheight=1)  # Stretch to fit window (Idek if this works properly because it isn't doing it that well)
     
     # welcome back message
     if first_name == None:
@@ -263,9 +263,10 @@ def prompt_for_username():
     # Return the username after the window closes
     return username
 
-def main():
+def main(hardware_id=None):
     userstatus=None
-    hardware_id = sys.argv[1] #This gets the hardware ID from the gloabl system variables as defined from the other script to pass along the variables.
+    if hardware_id == None:
+        hardware_id = sys.argv[1] #This gets the hardware ID from the gloabl system variables as defined from the other script to pass along the variables.
     workbook,sheet,sheet2 = load_excel()
     username = find_hardware_id(sheet2, hardware_id)
     first_name=None

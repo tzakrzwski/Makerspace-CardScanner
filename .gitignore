@@ -9,6 +9,14 @@ __pycache__/
 # Config Files
 *.json
 
+# Box Tokens
+*.bak
+*.dat
+*.dir
+
+# Test directories
+box_testing/
+
 # Distribution / packaging
 .Python
 build/
