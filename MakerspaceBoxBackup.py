@@ -299,13 +299,16 @@ class CSVBoxFile():
     '''
     def update_remote(self, client:BoxClient):
 
-        # Check if file is locked (aka another computer is in control)
-        file_lock_info = client.files.get_file_by_id(
-            self.file_id,
-            fields=["lock"]
-            )
-        if file_lock_info.lock:
-            raise Exception(f"File {self.file_name} is locked; Not safe to update")
+        # Check if this file object does not hold the lock
+        if not self.islockheld():
+
+            # Check if file is locked (aka another computer is in control)
+            file_lock_info = client.files.get_file_by_id(
+                self.file_id,
+                fields=["lock"]
+                )
+            if file_lock_info.lock:
+                raise Exception(f"File {self.file_name} is locked; Not safe to update")
         
         # Lock the file during upload to prevent conflict
         self.lock(client)
@@ -316,6 +319,9 @@ class CSVBoxFile():
             UploadFileAttributes(self.file_name, UploadFileAttributesParentField(self.folder_id)),
             file=open(self.local_path, "rb")
             )
+        
+        # Update the box file information
+        self.box_file_info = client.files.get_file_by_id(self.file_id)
         
         # Unlocks the file
         self.unlock(client)
@@ -342,6 +348,13 @@ class CSVBoxFile():
         
         return 1
     
+    '''
+    Checks if this object holds the lock to the file
+    Returns: 1 if object holds lock; 0 if not holds lock
+    '''
+    def islockheld(self):
+        return (self.lock_held is not False and self.lock_held > datetime.datetime.now(datetime.timezone.utc))
+
 
     '''
     Remove the lock on the file 
@@ -349,7 +362,7 @@ class CSVBoxFile():
     def unlock(self, client:BoxClient):
 
         # Check if the current object holds the file lock
-        if not self.lock_held or self.lock_held < datetime.datetime.now(datetime.timezone.utc):
+        if not self.islockheld():
 
             # Check if file is locked by another process
             file_lock_info = client.files.get_file_by_id(
@@ -392,13 +405,105 @@ Box File object for handling the master user list
 class BoxFileUserList(CSVBoxFile):
 
     # Need to pass path to local file and remote file id
-    def __init__(self, client:BoxClient, file_id=None, local_path="", file_name=""):
+    def __init__(self, client:BoxClient, file_id=None, local_path="", file_name="", update_interval=60):
         
+        self.update_interval = update_interval # How often to check box for a new version of the file
+        self.client = client # Store the client; I mean why not, its not going to change
+
         # Call parent initalization to create the box object
         super().__init__(client, file_id=file_id, local_path=local_path, file_name=file_name, box_overwrite=False)
 
         # Download the current version of the user list from remote
         self.download(client)
+
+        # Create and start a thread for checking for updates to the box file
+        self.poll_remote_thread = threading.Thread(target=self.poll_remote, daemon=True)
+        self.poll_remote_thread.start()
+
+    '''
+    Check the box file for a new version
+    Return: 1 if updated file, 0 if no update, -1 if error
+    '''
+    def check_remote_updates(self, client:BoxClient):
+        
+        # Get info about the box file
+        current_box_file_info = client.files.get_file_by_id(self.file_id)
+        
+        # Check for difference between file versions
+        if current_box_file_info.file_version.id != self.box_file_info.file_version.id:
+
+            # Difference in file version; Download the latest version
+            self.download(self.client)
+
+            # Update the box file information
+            self.box_file_info = client.files.get_file_by_id(self.file_id)
+
+            return 1
+        
+        # Current box file has same version as local
+        else:
+            return 0 
+
+
+    '''
+    Periodicly checks remote source for updates to box file
+    '''
+    def poll_remote(self):
+        
+        # Wrap function in exception handling to prevent from stopping thread
+        try:
+
+            # Loop forever
+            # Note, since this is called from a daemon thread, it will be ended when main thread exited
+            while True:
+                
+                # Check for updates to the box file
+                if self.check_remote_updates(self.client) == 1:
+                    print("Remote updated and Local updated")
+
+                # Wait for the update interval before polling again
+                time.sleep(self.update_interval)
+                # And yes, technically I could use a timestamp for this to get more accurate polling times
+                # Or a sceduler, but tbh, its not that deep
+
+        except Exception as err:
+            print(f"Polling thread rose exception: {err}")
+
+
+    '''
+    Write a new entry to the local and remote userbase
+    '''
+    def write_user_entry(self, entry:List[str]):
+
+        # Check if the current object holds the file lock
+        if not self.islockheld():
+
+            # Check if file is locked (aka another computer is in control)
+            file_lock_info = self.client.files.get_file_by_id(
+                self.file_id,
+                fields=["lock"]
+                )
+            if file_lock_info.lock:
+                raise Exception(f"File {self.file_name} is locked; Not safe to update")
+        
+        # Lock the file during update to prevent collsions
+        self.lock(self.client, time=60)
+
+        # Check if there are updates to the remote source
+        self.check_remote_updates(self.client)
+
+        # Open the local file and write the new entry
+        with open(self.local_path, "a") as file:
+            file.write(','.join(entry)+'\n')
+
+        # Update the remote file
+        self.update_remote(self.client)
+
+        # Updating the file will also remove the lock 
+
+        return 1
+
+
 
 
 
@@ -461,7 +566,24 @@ def main():
 
     boxbackup = BoxFileBackup(client, "box_testing/test_data.csv", "box_testing/backup", "309962394982")
 
-    boxuserlist = BoxFileUserList(client, "1792496802284", local_path="box_testing", file_name="test_data_250303.csv")
+    boxuserlist = BoxFileUserList(client, "1792496802284", local_path="box_testing/test_data_250304.csv", update_interval=60)
+
+    entry = ["tzakrzw","908787","CECAS","Mechanical Engineering","Senior", str(datetime.datetime.now()),"3/3/2025 11:35","999"]
+    boxuserlist.write_user_entry(entry)
+
+    print(f'Added entry to log: {','.join(entry)}')
+
+    time.sleep(30)
+
+    boxFile = CSVBoxFile(client, file_id="1792496802284", local_path="box_testing/test_data_250304.csv")
+
+    with open(boxFile.local_path, "a") as f:
+        f.write(f"tzakrw,2068295,{str(datetime.datetime.now())}\n")
+
+    boxFile.update_remote(client)
+    print("Wrote some extra data to file")
+
+    time.sleep(60)
 
 
     
