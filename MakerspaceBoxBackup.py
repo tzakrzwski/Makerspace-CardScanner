@@ -6,15 +6,16 @@ import os
 import shutil
 import threading
 import datetime
+import argparse
 
 DEV_TOKEN = "NrFHccN9uqbwtrGRoFGQZgEJOTCedL9B" # From the Box dev console; Needs updated every hour
 USE_DEV_TOKEN = False
 
-# Read configuration options from file
-with open("box_config.json") as f:
-    config_options = json.loads(f.read())
 
 '''
+NOTE: Calling this file directly will generate a backup of the file requested (either user or login)
+
+
 How often to update?
 + So, since clemson is on the enterprise plan, should be able to have 100 versions of documents before they start rolling over
 + However, to confirm logins between locations, should update the database more than one a week
@@ -25,25 +26,29 @@ How often to update?
 \-> Back-up = Copy of file is stored
   > Updated = New version of file is stored or pulled
 + So, here is the proposal:
-- One user list for all time; Backed-up ever week; Updated every hour*
+- One user list for all time; Backed-up ever week; Updated every minute*
 - One login list per location per semester; Backed-up every week; Updated every day*
 - * = Only update is there is new data
 - Also, the system should check if there is a new user list periodicly and update its local copy if so
 
 - Rn, there is not planned for any checks that there are duplicate users in the user list;
 \-> System will just append the new ones to the end
-'''
 
-'''
+
+Backups will be handled by windows tasks
+OR linux cron jobs
+
+Regular updates will be handled by main program
+
+
 Updating shared Box files (user list)
 1) Check if the file to update is locked
 2) If locked, then try again later
 3) If not locked, then lock the file to prevent someone else from updating
 4) Download the current version of the file from box
 5) Make the proper changes to the document (aka append new logins)
-'''
 
-'''
+
 User list
 + Need two copies:
 1) Master list from box
@@ -55,10 +60,9 @@ User list
 + So can download, update, and push updated userlist without much pain
 
 + Also, would be nice to have a method to verify if the local registration has the same data as remote source
-'''
 
 
-'''
+
 Authentication Notes:
 + Need to do via OAuth2 (otherwise need admin to aprove app)
 \-> Therefore, an intern / user needs to login to authorize the system AND the system will act from their account
@@ -83,10 +87,14 @@ Authentication Notes:
 6) Generate BoxClient
 '''
 
+# Read configuration options from file
+with open("box_config.json") as f:
+    config_options = json.loads(f.read())
+
 '''
 Works through the box authentication workflow to return a client object
 '''
-def get_box_client_oauth() -> BoxClient:
+def get_box_client_oauth(allow_login = True) -> BoxClient:
 
     # Check if in development; Then use the development token
     if USE_DEV_TOKEN:
@@ -107,7 +115,7 @@ def get_box_client_oauth() -> BoxClient:
     # Check if the token storage contains a valid token
     print("Checking for active access token")
     access_token = auth.token_storage.get()
-    if not access_token:
+    if not access_token and allow_login:
 
         # No token, so need to authorize the app via OAuth2
         print("No active access token, authorization required")
@@ -184,11 +192,11 @@ def get_box_client_oauth() -> BoxClient:
 '''
 Parent class for handling box files
 '''
-class CSVBoxFile():
+class BoxFile():
 
     # Need to pass either a path OR a file_name
     # Also, need to either pass a folder_id or file_id
-    def __init__(self, client:BoxClient, local_path = "", file_name = "", folder_id = None, file_id = None, box_overwrite = False):
+    def __init__(self, client:BoxClient, local_path, folder_id = None, file_id = None, box_overwrite = False):
 
         self.box_overwrite = box_overwrite # Used to prevent object from creating new files that overwrite existing ones in box
         # Note, this setting only applies for new files being generated with the same filename
@@ -196,23 +204,21 @@ class CSVBoxFile():
         # Meant as a safety measure; Can disable
 
         self.lock_held = False # Stores if object has lock to file; Set to timestamp of lock experation when lock set
+        self.client = client # For brokering deals with box
 
-        # Setup local storage
-        # Check if the local path exsists
-        if not os.path.exists(local_path):
-            raise Exception("Local path does not exist; Please provide filepath or directory path")
-
-        # Check if local path is file
+        # Check if the file in the local path already exsists
         if os.path.isfile(local_path):
             self.local_path = os.path.abspath(local_path) # Path to local file
             self.file_name = os.path.basename(local_path) # Name of the file
-        
+
+        # Check if the directory in the local path exists
+        elif os.path.isdir(os.path.dirname(local_path)):
+            self.local_path = os.path.abspath(local_path) # Path to local file
+            self.file_name = os.path.basename(local_path) # Name of the file
+            
+        # The file does not exsist and neither does the parent directory
         else:
-        # Local path is a directory; Create the file from filename
-            if not file_name:
-                raise Exception("Directory provided, but no filename")
-            self.local_path = os.path.join(local_path, file_name) # Path to local file
-            self.file_name = file_name # Name of the file
+            raise Exception(f"Local path {local_path} does not exist, nor directory {os.path.dirname(local_path)}")
 
         # Setup remote storage
         # Check if file id provided
@@ -235,14 +241,18 @@ class CSVBoxFile():
 
             # Perform an inital upload to box
             self.folder_id = folder_id
-            self.upload(client)
+            self.upload()
+
+        # Neither folder or file provided; 
+        else:
+            raise Exception(f"No box file or box folder provided")
 
 
     '''
     Uploads new file to box
     https://github.com/box-community/box-python-gen-workshop/blob/main/workshops/files/files.md
     '''
-    def upload(self, client:BoxClient):
+    def upload(self):
 
         # Check if there the file exists on the local machine
         if os.path.exists(self.local_path):
@@ -253,13 +263,13 @@ class CSVBoxFile():
 
         try:
             # Perform "preflight check" -> aka can the file be uploaded
-            client.uploads.preflight_file_upload_check(
+            self.client.uploads.preflight_file_upload_check(
                 name=self.file_name,
                 parent=PreflightFileUploadCheckParent(id=self.folder_id)
                 )
             
             # Create new file in folder
-            uploaded_files = client.uploads.upload_file(
+            uploaded_files = self.client.uploads.upload_file(
                 UploadFileAttributes(self.file_name, parent=UploadFileAttributesParentField(self.folder_id)),
                 file=open(self.local_path, file_mode)
                 )
@@ -282,7 +292,7 @@ class CSVBoxFile():
                 self.file_id = err.response_info.body["context_info"]["conflicts"]["id"]
 
                 # Update (overwrite) file in box
-                uploaded_files = client.uploads.upload_file_version(
+                uploaded_files = self.client.uploads.upload_file_version(
                     self.file_id,
                     UploadFileAttributes(self.file_name, UploadFileAttributesParentField(self.folder_id)),
                     file=open(self.local_path, file_mode)
@@ -297,13 +307,13 @@ class CSVBoxFile():
     Update the file on box
     Return: 1 if sucessful; 0 otherwise
     '''
-    def update_remote(self, client:BoxClient):
+    def update_remote(self):
 
         # Check if this file object does not hold the lock
         if not self.islockheld():
 
             # Check if file is locked (aka another computer is in control)
-            file_lock_info = client.files.get_file_by_id(
+            file_lock_info = self.client.files.get_file_by_id(
                 self.file_id,
                 fields=["lock"]
                 )
@@ -311,20 +321,20 @@ class CSVBoxFile():
                 raise Exception(f"File {self.file_name} is locked; Not safe to update")
         
         # Lock the file during upload to prevent conflict
-        self.lock(client)
+        self.lock()
         
         # Update file in box
-        uploaded_files = client.uploads.upload_file_version(
+        uploaded_files = self.client.uploads.upload_file_version(
             self.file_id,
             UploadFileAttributes(self.file_name, UploadFileAttributesParentField(self.folder_id)),
             file=open(self.local_path, "rb")
             )
         
         # Update the box file information
-        self.box_file_info = client.files.get_file_by_id(self.file_id)
+        self.box_file_info = self.client.files.get_file_by_id(self.file_id)
         
         # Unlocks the file
-        self.unlock(client)
+        self.unlock()
         
         return 1
 
@@ -332,13 +342,13 @@ class CSVBoxFile():
     '''
     Create a lock on a file during updating to prevent conflicts
     '''
-    def lock(self, client:BoxClient, time=10):
+    def lock(self, time=10):
 
         # Calculate the time for the lock to be active till    
         expiration_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=time)
 
         # Set the lock
-        client.files.update_file_by_id(
+        self.client.files.update_file_by_id(
             self.file_id,
             lock=UpdateFileByIdLock(expires_at=expiration_time)
             )
@@ -359,13 +369,13 @@ class CSVBoxFile():
     '''
     Remove the lock on the file 
     '''
-    def unlock(self, client:BoxClient):
+    def unlock(self):
 
         # Check if the current object holds the file lock
         if not self.islockheld():
 
             # Check if file is locked by another process
-            file_lock_info = client.files.get_file_by_id(
+            file_lock_info = self.client.files.get_file_by_id(
                 self.file_id,
                 fields=["lock"]
                 )
@@ -373,7 +383,7 @@ class CSVBoxFile():
                 raise Exception(f"File {self.file_name} is locked; Not safe to update")
             
         # Update box file to remove lock
-        client.files.update_file_by_id(
+        self.client.files.update_file_by_id(
             self.file_id,
             lock=null
             )
@@ -387,10 +397,10 @@ class CSVBoxFile():
     Download file from box
     https://github.com/box-community/box-python-gen-workshop/blob/main/workshops/files/files.md
     '''
-    def download(self, client:BoxClient):
+    def download(self):
 
         # Download file from box
-        file_stream = client.downloads.download_file(self.file_id)
+        file_stream = self.client.downloads.download_file(self.file_id)
 
         # Open the local file and copy the filedata
         with open(self.local_path, "wb") as file:
@@ -402,19 +412,18 @@ class CSVBoxFile():
 '''
 Box File object for handling the master user list
 '''
-class BoxFileUserList(CSVBoxFile):
+class BoxFileUserList(BoxFile):
 
     # Need to pass path to local file and remote file id
-    def __init__(self, client:BoxClient, file_id=None, local_path="", file_name="", update_interval=60):
+    def __init__(self, client:BoxClient, local_path, file_id, update_interval=60):
         
         self.update_interval = update_interval # How often to check box for a new version of the file
-        self.client = client # Store the client; I mean why not, its not going to change
 
         # Call parent initalization to create the box object
-        super().__init__(client, file_id=file_id, local_path=local_path, file_name=file_name, box_overwrite=False)
+        super().__init__(client, local_path=local_path, file_id=file_id, box_overwrite=False)
 
         # Download the current version of the user list from remote
-        self.download(client)
+        self.download()
 
         # Create and start a thread for checking for updates to the box file
         self.poll_remote_thread = threading.Thread(target=self.poll_remote, daemon=True)
@@ -424,19 +433,19 @@ class BoxFileUserList(CSVBoxFile):
     Check the box file for a new version
     Return: 1 if updated file, 0 if no update, -1 if error
     '''
-    def check_remote_updates(self, client:BoxClient):
+    def check_remote_updates(self):
         
         # Get info about the box file
-        current_box_file_info = client.files.get_file_by_id(self.file_id)
+        current_box_file_info = self.client.files.get_file_by_id(self.file_id)
         
         # Check for difference between file versions
         if current_box_file_info.file_version.id != self.box_file_info.file_version.id:
 
             # Difference in file version; Download the latest version
-            self.download(self.client)
+            self.download()
 
             # Update the box file information
-            self.box_file_info = client.files.get_file_by_id(self.file_id)
+            self.box_file_info = self.client.files.get_file_by_id(self.file_id)
 
             return 1
         
@@ -504,14 +513,10 @@ class BoxFileUserList(CSVBoxFile):
         return 1
 
 
-
-
-
 '''
 Box File object for creating a backup of the given Box File object
 '''
-
-class BoxFileBackup(CSVBoxFile):
+class BoxFileBackup(BoxFile):
 
     # Need to pass path to file for backup as well as the folder for creating the backup
     def __init__(self, client:BoxClient, file_path, backup_path, folder_id, backup_extension = ""):
@@ -545,14 +550,85 @@ class BoxFileBackup(CSVBoxFile):
 
 
 '''
-Main Process Loop
+Box File object for handling the login records
+NOTE: The files from this source on box are really just copies of the ones from the local
+\-> Its the responsiblity of the local machine (and maintainers) to not overwrite remote and local data
+'''
+class BoxFileLoginList(BoxFile):
+
+    '''
+    Write a new entry to the local login file
+    '''
+    def write_login_entry(self, entry:List[str]):
+
+        # Open the local file and write the new entry
+        with open(self.local_path, "a") as file:
+            file.write(','.join(entry)+'\n')
+
+
 
 '''
+Main Process Loop
+Processes system arguements to generate a backup of the requested file type
+'''
 def main():
+
+    # Process the input argument of the file type to backup
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file_type",
+                        help="Type of file to backup: Either 'login' or 'user'",
+                        type=str)
+    args = parser.parse_args()
+
+    # Branch based what file type to backup
+    if args.file_type == "login":
+
+        # Get the client infomation for the backup
+        # Note, there needs to be an active token on file OR the function will fail
+        client = get_box_client_oauth(allow_login=False)
+        
+        # Create a backup of the configured login file
+        backupFile = BoxFileBackup(client,
+                                   config_options["LOGIN_FILE_PATH"],
+                                   config_options["BACKUP_FOLDER_PATH"], 
+                                   config_options["BACKUP_BOX_FOLDER_ID"]
+                                   )
+
+        print(f"Created backup of file: {config_options["LOGIN_FILE_PATH"]} as {backupFile.file_name}")
+        print(f"Remote file id: {backupFile.file_id}")
+
+        return 1
+
+    elif args.file_type == "user":
+        
+        # Get the client infomation for the backup
+        # Note, there needs to be an active token on file OR the function will fail
+        client = get_box_client_oauth(allow_login=False)
+        
+        # Create a backup of the configured user file
+        backupFile = BoxFileBackup(client,
+                                   config_options["USER_FILE_PATH"],
+                                   config_options["BACKUP_FOLDER_PATH"], 
+                                   config_options["BACKUP_BOX_FOLDER_ID"]
+                                   )
+
+        print(f"Created backup of file: {config_options["USER_FILE_PATH"]} as {backupFile.file_name}")
+        print(f"Remote file id: {backupFile.file_id}")
+
+        return 1
+
+    else:
+        # Not a valid parameter provided; Throw error
+        raise Exception(f"Not a valid parameter for file backup: {args.file_type}")
+
+
+
+
+def test():
     client = get_box_client_oauth()
-    boxFile = CSVBoxFile(client, local_path="box_testing/Backup_250302_08.csv", folder_id="309828162730", box_overwrite=True)
+    boxFile = BoxFile(client, local_path="box_testing/test_data_250304.csv", folder_id="309828162730", box_overwrite=True)
     print("Object Created")
-    boxFile.download(client)
+    boxFile.download()
     print("File downloaded")
 
     with open(boxFile.local_path, "a") as f:
@@ -560,13 +636,13 @@ def main():
 
     print("Wrote to file")
     
-    boxFile.update_remote(client)
+    boxFile.update_remote()
 
     print("Updated file")
 
     boxbackup = BoxFileBackup(client, "box_testing/test_data.csv", "box_testing/backup", "309962394982")
 
-    boxuserlist = BoxFileUserList(client, "1792496802284", local_path="box_testing/test_data_250304.csv", update_interval=60)
+    boxuserlist = BoxFileUserList(client, file_id="1793836084373", local_path="box_testing/test_data_250304.csv", update_interval=60)
 
     entry = ["tzakrzw","908787","CECAS","Mechanical Engineering","Senior", str(datetime.datetime.now()),"3/3/2025 11:35","999"]
     boxuserlist.write_user_entry(entry)
@@ -575,12 +651,12 @@ def main():
 
     time.sleep(30)
 
-    boxFile = CSVBoxFile(client, file_id="1792496802284", local_path="box_testing/test_data_250304.csv")
+    boxFile = BoxFile(client, file_id="1792496802284", local_path="box_testing/test_data_250304.csv")
 
     with open(boxFile.local_path, "a") as f:
         f.write(f"tzakrw,2068295,{str(datetime.datetime.now())}\n")
 
-    boxFile.update_remote(client)
+    boxFile.update_remote()
     print("Wrote some extra data to file")
 
     time.sleep(60)
